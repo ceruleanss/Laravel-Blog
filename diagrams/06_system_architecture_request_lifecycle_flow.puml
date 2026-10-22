@@ -1,0 +1,135 @@
+@startuml system_architecture_request_lifecycle_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 200
+skinparam maxMessageSize 140
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - End-to-End System Architecture & Request Lifecycle Flow**
+
+|#EFF6FF|Client Browser (Tailwind & Alpine)|
+|#F0FDF4|Docker Container & Web Server|
+|#FEFCE8|Laravel 13 Kernel & Middleware|
+|#FAF5FF|Routing, Policies & Controllers|
+|#F1F5F9|Eloquent ORM & SQLite Database|
+
+|Client Browser (Tailwind & Alpine)|
+start
+:User initiates HTTP Request\n(browse blog, filter categories, submit post, login);
+
+|Docker Container & Web Server|
+:Docker Container binds port **8000** to host;
+:PHP Development Server receives request;
+:Route request to **public/index.php**;
+
+|Laravel 13 Kernel & Middleware|
+:Bootstrap Laravel Application (**bootstrap/app.php**);
+:Register Service Providers:
+- **AppServiceProvider** sets:
+  ""Model::preventLazyLoading(! app()->isProduction())""
+- Storage & Cache bindings configured;
+
+:Execute Global & Web Middleware Pipeline:
+1. **EncryptCookies**
+2. **AddQueuedCookiesToResponse**
+3. **StartSession** (reads/writes SQLite **sessions** table)
+4. **ShareErrorsFromSession**
+5. **VerifyCsrfToken** (protects POST/PUT/DELETE requests);
+
+|Routing, Policies & Controllers|
+:Match request against **routes/web.php** and **routes/auth.php**;
+
+if (Route Type?) then (Public Blog Route)
+    :Route: **GET /** or **GET /posts/{post:slug}**;
+    :Invoke **PostController@index** or **PostController@show**;
+
+    |Eloquent ORM & SQLite Database|
+    :Query **posts** table with eager loading:
+    ""Post::with(['author', 'category'])->latest()->filter($filters)"";
+    :Execute queries on SQLite database (**database/database.sqlite**);
+    :Query **categories** table with post counts;
+
+    |Routing, Policies & Controllers|
+    :Compile Component Tree without traditional @extends inheritance:
+    - **<x-public-layout>**
+      - **<x-navbar>** (Interactive Alpine.js dropdown & drawer)
+      - **<x-search-bar>** (Filter pills, search input)
+      - **<x-post-card>** (Category **<x-badge>**, author metadata);
+
+else if (Route Type?) then (Authentication Route)
+    :Route: **login**, **register**, or **logout**;
+    :Invoke Laravel Breeze Controllers & **LoginRequest**;
+
+    |Eloquent ORM & SQLite Database|
+    :Query SQLite **cache** table for Rate Limiter checks;
+    :Query **users** table for credentials / registration;
+    :Update **sessions** table on authentication;
+
+    |Routing, Policies & Controllers|
+    :Compile Auth Views (**<x-guest-layout>**);
+
+else (Protected Dashboard Route)
+    |Laravel 13 Kernel & Middleware|
+    :Verify **Authenticate** & **EnsureEmailIsVerified** middleware;
+    if (User is Authenticated?) then (no)
+        |Routing, Policies & Controllers|
+        :Redirect to **login** route; <<#FEE2E2>>
+        stop
+    else (yes)
+        |Routing, Policies & Controllers|
+        :Route: **/dashboard/posts/*** or **/profile**;
+        :Invoke **Gate::authorize()** invoking **PostPolicy**;
+        
+        if (User satisfies Policy conditions?) then (no)
+            :Abort with **403 Forbidden**; <<#FEE2E2>>
+            stop
+        else (yes)
+            :Invoke **DashboardPostController** CRUD method;
+            |Eloquent ORM & SQLite Database|
+            :Read/Write to **posts** table;
+            :Manage media on **Storage::disk('public')**\n(Mapped to **public/storage/posts**);
+            |Routing, Policies & Controllers|
+            :Compile Dashboard Views (**<x-app-layout>**):
+            - Dashboard Table with pagination
+            - Create/Edit forms with Alpine.js real-time slug generator
+            - Alpine.js delete confirmation modal dialog;
+        endif
+    endif
+endif
+
+|Docker Container & Web Server|
+:Generate HTTP Response with compiled HTML, headers, and session cookies;
+
+|Client Browser (Tailwind & Alpine)|
+:Browser parses HTML, loads compiled Tailwind CSS & JS bundles;
+:Initialize Alpine.js reactive components:
+- Mobile drawer toggles
+- User dropdown menus
+- Real-time slug auto-generation from title
+- Live file upload thumbnail previews
+- Delete confirmation modal with backdrop transitions
+- Auto-dismissing flash notification alerts;
+
+:Fully responsive, interactive page rendered for user; <<#DCFCE7>>
+stop
+
+@enduml

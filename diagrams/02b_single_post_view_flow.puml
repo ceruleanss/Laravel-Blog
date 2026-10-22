@@ -1,0 +1,76 @@
+@startuml single_post_view_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 220
+skinparam maxMessageSize 150
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - Single Post View & Route Model Binding Flow**
+
+|#EFF6FF|Visitor (Client Browser)|
+|#F0FDF4|Router & PostController|
+|#FEFCE8|Post Model (Eloquent)|
+|#FAF5FF|SQLite Database & Blade Components|
+
+|Visitor (Client Browser)|
+start
+:Visitor clicks on a post card or navigates to:\n**GET /posts/{post:slug}**;
+
+|Router & PostController|
+:Laravel Router intercepts request;
+:Execute Implicit Route Model Binding using slug:\n""Post::where('slug', $slug)->firstOrFail()"";
+
+|SQLite Database & Blade Components|
+:Execute SELECT query on SQLite **posts** table;
+
+if (Post record found?) then (no - Slug Missing)
+    |Router & PostController|
+    :Throw **ModelNotFoundException**;
+    |Visitor (Client Browser)|
+    :Display Custom 404 Not Found Page\nwith "Return to Home" action; <<#FEE2E2>>
+    stop
+else (yes - Post Exists)
+    |Router & PostController|
+    :Invoke **PostController@show(Post $post)**;
+
+    |Post Model (Eloquent)|
+    :Query 3 related posts from same category:\n""Post::where('category_id', $post->category_id)""\n""  ->where('id', '!=', $post->id)""\n""  ->latest()->take(3)->get()"";
+    :Eager load **author** and **category** relationships;
+
+    |SQLite Database & Blade Components|
+    :Execute SELECT query for related articles;
+    :Compile view **posts.show** with Blade components:
+    - **<x-public-layout>** (SEO title & meta tags)
+      - Breadcrumb navigation (Home > Category > Post)
+      - Category badge via **<x-badge>**
+      - Post Title & Author byline (avatar, published date)
+      - Full featured image from **storage/posts/**
+      - Formatted article body paragraphs
+      - Author Bio callout card with author posts link
+      - Related articles grid (3 cards);
+
+    |Visitor (Client Browser)|
+    :Display complete, beautifully styled article\nwith reading time & related suggestions; <<#DCFCE7>>
+    stop
+endif
+
+@enduml

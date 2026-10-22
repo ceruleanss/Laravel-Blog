@@ -1,0 +1,96 @@
+@startuml auth_login_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 220
+skinparam maxMessageSize 150
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - User Authentication & Rate Limiting Flow**
+
+|#EFF6FF|User (Browser / Client)|
+|#F0FDF4|Breeze Controller & Requests|
+|#FEFCE8|RateLimiter & Cache Store|
+|#FAF5FF|SQLite Database (Users, Sessions, Cache)|
+
+|User (Browser / Client)|
+start
+:User navigates to **GET /login**;
+
+|Breeze Controller & Requests|
+:Render login view (**<x-guest-layout>**);
+
+|User (Browser / Client)|
+:Fill in Email, Password, Remember Me;
+:Submit **POST /login**;
+
+|Breeze Controller & Requests|
+:Intercept via **LoginRequest**;
+:Generate Throttle Key:\n""Str::lower($email) . '|' . $request->ip()"";
+
+|RateLimiter & Cache Store|
+:Call **RateLimiter::tooManyAttempts($throttleKey, 5)**;
+
+|SQLite Database (Users, Sessions, Cache)|
+:Query **cache** table for attempts count;
+
+|RateLimiter & Cache Store|
+if (Attempts >= 5?) then (yes - Rate Limited)
+    :Fire **Lockout** Event;
+    :Calculate remaining lockout seconds;
+    |User (Browser / Client)|
+    :Display 429 Throttle Error:\n"Too many login attempts. Please try again in X seconds."; <<#FEE2E2>>
+    stop
+else (no - Under Limit)
+    |Breeze Controller & Requests|
+    :Execute **Auth::attempt(['email', 'password'], $remember)**;
+    
+    |SQLite Database (Users, Sessions, Cache)|
+    :Query **users** table by email;
+    :Verify password using **Hash::check()**;
+    
+    |Breeze Controller & Requests|
+    if (Credentials Valid?) then (no - Invalid)
+        |RateLimiter & Cache Store|
+        :Call **RateLimiter::hit($throttleKey)**;
+        |SQLite Database (Users, Sessions, Cache)|
+        :Increment attempts counter in **cache** table;
+        |User (Browser / Client)|
+        :Return back with validation error:\n"These credentials do not match our records."; <<#FEE2E2>>
+        stop
+    else (yes - Valid)
+        |RateLimiter & Cache Store|
+        :Call **RateLimiter::clear($throttleKey)**;
+        |SQLite Database (Users, Sessions, Cache)|
+        :Clear key from **cache** table;
+        
+        |Breeze Controller & Requests|
+        :$request->session()->regenerate();
+        |SQLite Database (Users, Sessions, Cache)|
+        :Insert / update record in **sessions** table;
+        
+        |User (Browser / Client)|
+        :Redirect to intended page or **/dashboard**\n(Authenticated as Author); <<#DCFCE7>>
+        stop
+    endif
+endif
+
+@enduml

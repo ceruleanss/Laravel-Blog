@@ -1,0 +1,92 @@
+@startuml public_blog_feed_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 220
+skinparam maxMessageSize 150
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - Public Feed & Multi-Parameter Query Filtering Flow**
+
+|#EFF6FF|Visitor (Client Browser)|
+|#F0FDF4|PostController|
+|#FEFCE8|Post Model (Eloquent / Local Scopes)|
+|#FAF5FF|SQLite Database & Blade Components|
+
+|Visitor (Client Browser)|
+start
+:Visitor requests public blog feed:\n**GET /** with optional query parameters\n(""search"", ""category"", ""author"", ""page"");
+
+|PostController|
+:Invoke **PostController@index(Request $request)**;
+:Extract query filters:\n""$request->only(['search', 'category', 'author'])"";
+
+|Post Model (Eloquent / Local Scopes)|
+:Initialize query: **Post::latest()**;
+:Apply local scope: **->filter($filters)**;
+
+if ($filters['search'] provided?) then (yes)
+    :Apply SQL search clause:\n""WHERE (title LIKE ? OR body LIKE ?)"";
+endif
+
+if ($filters['category'] provided?) then (yes)
+    :Apply category relation filter:\n""whereHas('category', fn($q) => $q->where('slug', $category))"";
+endif
+
+if ($filters['author'] provided?) then (yes)
+    :Apply author relation filter:\n""whereHas('author', fn($q) => $q->where('username', $author))"";
+endif
+
+:Eager load relationships in **$with** property:\n- **author** (User model)\n- **category** (Category model)\n*(Prevents N+1 queries via AppServiceProvider)*;
+
+:Apply pagination with query string retention:\n**->paginate(9)->withQueryString()**;
+
+|SQLite Database & Blade Components|
+:Execute paginated SELECT query on SQLite database;
+:Fetch category listing with post counts:\n""Category::withCount('posts')->orderBy('name')->get()"";
+
+|PostController|
+:Pass data to view **posts.index**:\n(posts, categories, currentCategory, currentAuthor);
+
+|SQLite Database & Blade Components|
+:Compile Blade Component tree:
+- **<x-public-layout>** (HTML shell, Tailwind, Alpine.js)
+  - **<x-navbar>** (Active navigation, search, mobile drawer)
+  - **<x-search-bar>** (Search input & active filter pills);
+
+if (Posts Collection Empty?) then (yes - No Results)
+    :Render Empty State component with "Clear filters" action;
+else (no - Posts Found)
+    :Loop through 9 paginated posts;
+    :Render **<x-post-card :post="$post">**:
+    - Featured image (or curated dynamic gradient)
+    - **<x-badge>** with dynamic category color
+    - Title & excerpt snippet
+    - Author avatar & name linking to author filter
+    - Relative publish date via **diffForHumans()**;
+    :Render responsive pagination links;
+endif
+
+|Visitor (Client Browser)|
+:Display responsive blog feed with interactive filter pills; <<#DCFCE7>>
+stop
+
+@enduml

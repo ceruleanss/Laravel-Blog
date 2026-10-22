@@ -1,0 +1,155 @@
+name: Build & Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      app_image: ${{ steps.image-names.outputs.app_image }}
+      web_image: ${{ steps.image-names.outputs.web_image }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Image Names to Lowercase
+        id: image-names
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "app_image=${{ env.REGISTRY }}/${REPO_LOWER}-app" >> $GITHUB_OUTPUT
+          echo "web_image=${{ env.REGISTRY }}/${REPO_LOWER}-web" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ----------------------------------------------------
+      # 1. Build & Push PHP 8.3-FPM Application Image
+      # ----------------------------------------------------
+      - name: Build & Push Laravel App Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.prod
+          push: true
+          tags: |
+            ${{ steps.image-names.outputs.app_image }}:latest
+            ${{ steps.image-names.outputs.app_image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ----------------------------------------------------
+      # 2. Build & Push Nginx Static Asset Server Image
+      # ----------------------------------------------------
+      - name: Build & Push Nginx Web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/nginx/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image-names.outputs.web_image }}:latest
+            ${{ steps.image-names.outputs.web_image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to VPS via SSH
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Copy docker-compose.prod.yml to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "docker-compose.prod.yml"
+          target: "/var/www/blog"
+
+      - name: Pull Images and Restart Containers on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          APP_IMAGE: "${{ needs.build-and-push.outputs.app_image }}:latest"
+          WEB_IMAGE: "${{ needs.build-and-push.outputs.web_image }}:latest"
+          GHCR_USER: "${{ github.actor }}"
+          GHCR_PASS: "${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}"
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: APP_IMAGE,WEB_IMAGE,GHCR_USER,GHCR_PASS
+          script: |
+            set -e
+            echo "==> Deploying Laravel 13 Blog to VPS..."
+
+            # Ensure deployment directory exists
+            mkdir -p /var/www/blog
+            cd /var/www/blog
+
+            # Authenticate Docker with GHCR
+            echo "$GHCR_PASS" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            # Verify .env exists, if not create default
+            if [ ! -f .env ]; then
+              echo "==> .env not found on VPS! Creating initial .env from template..."
+              # Create a basic production .env with generated key
+              cat << 'EOF' > .env
+            APP_NAME="AYZM Laravel Blog"
+            APP_ENV=production
+            APP_KEY=base64:$(openssl rand -base64 32)
+            APP_DEBUG=false
+            APP_TIMEZONE=UTC
+            APP_URL=http://localhost
+            APP_PORT=80
+            DB_CONNECTION=sqlite
+            DB_DATABASE=/var/www/html/database/database.sqlite
+            SESSION_DRIVER=database
+            QUEUE_CONNECTION=database
+            CACHE_STORE=database
+            FILESYSTEM_DISK=public
+            EOF
+            fi
+
+            # Export image variables for docker compose
+            export APP_IMAGE="$APP_IMAGE"
+            export WEB_IMAGE="$WEB_IMAGE"
+
+            echo "==> Pulling latest images from GHCR..."
+            docker compose -f docker-compose.prod.yml pull
+
+            echo "==> Launching updated containers..."
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            echo "==> Pruning old unused images..."
+            docker image prune -af --filter "until=72h" || true
+
+            echo "==> Current container status:"
+            docker compose -f docker-compose.prod.yml ps
+
+            echo "==> Deployment to VPS completed successfully!"

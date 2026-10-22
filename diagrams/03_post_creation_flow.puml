@@ -1,0 +1,113 @@
+@startuml post_creation_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 220
+skinparam maxMessageSize 150
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - Author Dashboard: Post Creation & Alpine.js Flow**
+
+|#EFF6FF|Author (Browser & Alpine.js)|
+|#F0FDF4|Auth Middleware & Gate|
+|#FEFCE8|DashboardPostController|
+|#FAF5FF|Storage (Public Disk) & SQLite DB|
+
+|Author (Browser & Alpine.js)|
+start
+:Author clicks "+ Write New Post" in Dashboard / Navbar;
+:Navigate to **GET /dashboard/posts/create**;
+
+|Auth Middleware & Gate|
+:Verify **auth** & **verified** middleware;
+if (Is Authenticated?) then (no)
+    |Author (Browser & Alpine.js)|
+    :Redirect to **/login** with intended URL preserved; <<#FEE2E2>>
+    stop
+else (yes)
+    |Auth Middleware & Gate|
+    :Check **Gate::authorize('create', Post::class)**;
+    
+    |DashboardPostController|
+    :Fetch categories list:\n""Category::orderBy('name')->get()"";
+    :Render view **dashboard.posts.create**;
+    
+    |Author (Browser & Alpine.js)|
+    :Initialize Alpine.js scope:\n""x-data="{ title, slug, imagePreview, generateSlug() }""";
+    
+    :Author types article title into\n**<input x-model="title" @input="generateSlug()">**;
+    :Alpine.js auto-converts title to kebab-case slug\nand updates **x-model="slug"** in real-time;
+    
+    if (Author selects optional featured image?) then (yes)
+        :Alpine.js **FileReader** loads Data URL\nand renders dynamic image preview thumbnail;
+    else (no)
+        :Keep fallback placeholder icon;
+    endif
+    
+    :Author selects Category & types Body content;
+    :Author clicks "Publish Article" button;
+    :Submit form via **POST /dashboard/posts**\nwith CSRF Token (**@csrf**) and multipart encoding;
+
+    |Auth Middleware & Gate|
+    :Verify CSRF Token (**VerifyCsrfToken** middleware);
+    :Verify **Gate::authorize('create', Post::class)**;
+
+    |DashboardPostController|
+    :Execute Form Request Validation:
+    - **title**: required | string | max:255
+    - **slug**: required | string | max:255 | alpha_dash | unique:posts,slug
+    - **category_id**: required | exists:categories,id
+    - **body**: required | string
+    - **image**: nullable | image | mimes:jpeg,png,jpg,webp,gif | max:2048;
+
+    if (Validation Rules Passed?) then (no - Invalid)
+        |Author (Browser & Alpine.js)|
+        :Redirect back to create form with:\n- Validation error bag ($errors)\n- Preserved inputs via old(); <<#FEE2E2>>
+        stop
+    else (yes - Valid)
+        |DashboardPostController|
+        if ($request->hasFile('image')?) then (yes)
+            |Storage (Public Disk) & SQLite DB|
+            :Store file on public disk:\n""$path = $request->file('image')->store('posts', 'public')"";
+            :Generate unique hashed filename:\n""posts/abc123xyz.webp"";
+            |DashboardPostController|
+            :Set **$validated['image'] = $path**;
+        else (no)
+            |DashboardPostController|
+            :Set **$validated['image'] = null**;
+        endif
+
+        |Storage (Public Disk) & SQLite DB|
+        :Associate post with authenticated author:\n""$request->user()->posts()->create($validated)"";
+        :Insert new record into **posts** table in SQLite;
+
+        |DashboardPostController|
+        :Flash success message to session:\n""with('success', 'Article published successfully!')"";
+        :Redirect to **route('dashboard.posts.index')**;
+
+        |Author (Browser & Alpine.js)|
+        :Render **dashboard.posts.index** with new post;
+        :Alpine.js triggers auto-dismissing flash banner\n(""x-data="{ show: true }" x-init="setTimeout(() => show = false, 4000)""); <<#DCFCE7>>
+        stop
+    endif
+endif
+
+@enduml

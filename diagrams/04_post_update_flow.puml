@@ -1,0 +1,109 @@
+@startuml post_update_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 220
+skinparam maxMessageSize 150
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - Author Dashboard: Post Update & Policy Authorization Flow**
+
+|#EFF6FF|Author (Browser & Alpine.js)|
+|#F0FDF4|PostPolicy Authorization|
+|#FEFCE8|DashboardPostController|
+|#FAF5FF|Storage (Public Disk) & SQLite DB|
+
+|Author (Browser & Alpine.js)|
+start
+:Author clicks "Edit" button on a post row in Dashboard;
+:Navigate to **GET /dashboard/posts/{post}/edit**;
+
+|PostPolicy Authorization|
+:Execute **Gate::authorize('update', $post)**;
+:Evaluate **PostPolicy@update(User $user, Post $post)**:
+""return $user->id === $post->author_id"";
+
+if (Is Authenticated User the Post Author?) then (no - Unauthorized)
+    |PostPolicy Authorization|
+    :Abort with **403 Forbidden Error**\n("This action is unauthorized."); <<#FEE2E2>>
+    stop
+else (yes - Authorized)
+    |DashboardPostController|
+    :Fetch categories list:\n""Category::orderBy('name')->get()"";
+    :Pass **$post** and **$categories** to view **dashboard.posts.edit**;
+
+    |Author (Browser & Alpine.js)|
+    :Initialize Alpine.js scope prefilled with existing model attributes:
+    - Title, Slug, Category, Body
+    - Current image thumbnail (if present on storage);
+    :Author modifies fields or uploads a replacement image;
+    :Author clicks "Update Article" button;
+    :Submit form via **PUT /dashboard/posts/{post}**\nwith **@method('PUT')** and **@csrf**;
+
+    |PostPolicy Authorization|
+    :Re-verify **Gate::authorize('update', $post)**;
+    if (Authorized?) then (no)
+        :Abort with 403 Forbidden; <<#FEE2E2>>
+        stop
+    else (yes)
+        |DashboardPostController|
+        :Execute Validation with exception for current post ID:
+        - **title**: required | string | max:255
+        - **slug**: required | string | max:255 | alpha_dash | unique:posts,slug,{post->id}
+        - **category_id**: required | exists:categories,id
+        - **body**: required | string
+        - **image**: nullable | image | mimes:jpeg,png,jpg,webp,gif | max:2048;
+
+        if (Validation Passed?) then (no)
+            |Author (Browser & Alpine.js)|
+            :Redirect back to edit form with validation error bag; <<#FEE2E2>>
+            stop
+        else (yes)
+            |DashboardPostController|
+            if (Author selected a new image file?) then (yes)
+                |Storage (Public Disk) & SQLite DB|
+                if (Old image exists on disk?) then (yes)
+                    :Delete old image from storage:\n""Storage::disk('public')->delete($post->image)"";
+                else (no)
+                    :No previous image to delete;
+                endif
+                :Store replacement image on public disk:\n""$validated['image'] = $request->file('image')->store('posts', 'public')"";
+            else (no)
+                |DashboardPostController|
+                :Keep existing image path;
+            endif
+
+            |Storage (Public Disk) & SQLite DB|
+            :Execute database update:\n""$post->update($validated)"";
+            :Update **posts** table record and timestamps in SQLite;
+
+            |DashboardPostController|
+            :Flash message: **with('success', 'Article updated successfully!')**;
+            :Redirect to **route('dashboard.posts.index')**;
+
+            |Author (Browser & Alpine.js)|
+            :Display Dashboard table with updated article details\nand auto-dismissing success alert; <<#DCFCE7>>
+            stop
+        endif
+    endif
+endif
+
+@enduml

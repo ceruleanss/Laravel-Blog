@@ -1,0 +1,39 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Category;
+use App\Models\Post;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Post>
+ */
+class PostFactory extends Factory
+{
+    protected $model = Post::class;
+
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        $title = fake()->sentence(fake()->numberBetween(4, 9));
+        $paragraphs = fake()->paragraphs(fake()->numberBetween(4, 8));
+
+        return [
+            'title' => rtrim($title, '.'),
+            'slug' => Str::slug($title) . '-' . fake()->unique()->numberBetween(100, 99999),
+            'author_id' => User::factory(),
+            'category_id' => Category::factory(),
+            'body' => implode("\n\n", $paragraphs),
+            'image' => null,
+            'created_at' => fake()->dateTimeBetween('-3 months', 'now'),
+            'updated_at' => fn (array $attributes) => $attributes['created_at'],
+        ];
+    }
+}

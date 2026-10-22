@@ -1,0 +1,81 @@
+@startuml registration_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 220
+skinparam maxMessageSize 150
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - User Registration & Account Setup Flow**
+
+|#EFF6FF|User (Browser / Client)|
+|#F0FDF4|RegisteredUserController|
+|#FAF5FF|SQLite Database (Users, Sessions)|
+
+|User (Browser / Client)|
+start
+:User navigates to **GET /register**;
+
+|RegisteredUserController|
+:Render registration view (**<x-guest-layout>**);
+
+|User (Browser / Client)|
+:Fill in registration fields:
+- Name
+- Username (unique handle)
+- Email (unique address)
+- Password & Confirmation;
+:Submit registration form via **POST /register**;
+
+|RegisteredUserController|
+:Validate inputs via standard rules:
+- **name**: required | string | max:255
+- **username**: required | alpha_dash | max:255 | unique:users
+- **email**: required | string | lowercase | email | max:255 | unique:users
+- **password**: required | string | confirmed | min:8;
+
+if (Validation Rules Passed?) then (no - Errors Found)
+    |User (Browser / Client)|
+    :Return back to register view with:\n- Form error messages ($errors)\n- Preserved old input values; <<#FEE2E2>>
+    stop
+else (yes - Valid)
+    |RegisteredUserController|
+    :Hash password via **Hash::make($password)**;
+
+    |SQLite Database (Users, Sessions)|
+    :Execute **User::create([...])**;
+    :Set default avatar using seed:\n""api.dicebear.com/7.x/avataaars/svg?seed={username}"";
+    :Insert new user record into **users** table;
+
+    |RegisteredUserController|
+    :Trigger Laravel **Registered** event;
+    :Authenticate newly created user via **Auth::login($user)**;
+    :$request->session()->regenerate();
+
+    |SQLite Database (Users, Sessions)|
+    :Record new active session in **sessions** table;
+
+    |User (Browser / Client)|
+    :Redirect to **/dashboard** with active session\n(Logged in as author); <<#DCFCE7>>
+    stop
+endif
+
+@enduml

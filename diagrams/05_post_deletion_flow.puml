@@ -1,0 +1,100 @@
+@startuml post_deletion_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Inter, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+skinparam shadowout false
+
+skinparam wrapWidth 220
+skinparam maxMessageSize 150
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #64748B
+    FontColor #0F172A
+    FontSize 11
+    ArrowColor #475569
+    ArrowFontSize 10
+}
+
+skinparam activityDiamond {
+    BackgroundColor #FEF3C7
+    BorderColor #D97706
+    FontColor #92400E
+}
+
+title **Modern Laravel Blog - Author Dashboard: Post Deletion & Confirmation Modal Flow**
+
+|#EFF6FF|Author (Browser & Alpine.js)|
+|#FEFCE8|Alpine.js Confirmation Modal|
+|#F0FDF4|PostPolicy & Controller|
+|#FAF5FF|Storage (Public Disk) & SQLite DB|
+
+|Author (Browser & Alpine.js)|
+start
+:Author views posts list on **/dashboard/posts**;
+:Author clicks "Delete" button next to a post row;
+
+|Alpine.js Confirmation Modal|
+:Alpine.js intercepts event via **@click="openDeleteModal(post)"**;
+:Prevent default immediate form submission;
+:Set modal state:
+- **confirmDeleteModal = true**
+- **postToDelete = { id: post.id, title: post.title }**;
+:Render modal dialog with **x-transition** overlay:
+- Warning icon & title
+- "Are you sure you want to delete '[Title]'?"
+- Explanation that this action cannot be undone;
+
+|Author (Browser & Alpine.js)|
+if (User Decision?) then (Cancel / Press ESC / Click Backdrop)
+    |Alpine.js Confirmation Modal|
+    :Alpine.js catches **@keydown.escape.window** or Cancel button;
+    :Reset **confirmDeleteModal = false**;
+    :Modal fades out with smooth transition;
+    |Author (Browser & Alpine.js)|
+    :Action aborted; no data altered; <<#F1F5F9>>
+    stop
+else (Confirm Delete)
+    |Alpine.js Confirmation Modal|
+    :Author clicks danger "Yes, Delete Article" button;
+    :Submit dynamic delete form via **DELETE /dashboard/posts/{post}**;
+
+    |PostPolicy & Controller|
+    :Request intercepted by **DashboardPostController@destroy(Post $post)**;
+    :Execute **Gate::authorize('delete', $post)**;
+    :Evaluate **PostPolicy@delete(User $user, Post $post)**:
+    ""return $user->id === $post->author_id"";
+
+    if (Is Authenticated User the Post Author?) then (no - Unauthorized)
+        |PostPolicy & Controller|
+        :Abort with **403 Forbidden**\n("This action is unauthorized."); <<#FEE2E2>>
+        stop
+    else (yes - Authorized)
+        |Storage (Public Disk) & SQLite DB|
+        if (Post has associated image file?) then (yes)
+            if (File exists in storage/app/public/posts?) then (yes)
+                :Remove file from disk:\n""Storage::disk('public')->delete($post->image)"";
+            else (no)
+                :File does not exist on disk;
+            endif
+        else (no)
+            :No image attached;
+        endif
+
+        :Execute record deletion:\n""$post->delete()"";
+        :Delete row from **posts** table in SQLite database;
+
+        |PostPolicy & Controller|
+        :Flash success message to session:\n""with('success', 'Article deleted successfully!')"";
+        :Redirect back to **route('dashboard.posts.index')**;
+
+        |Author (Browser & Alpine.js)|
+        :Dashboard re-renders with the post removed from the table;
+        :Alpine.js renders auto-dismissing confirmation alert\n("Article deleted successfully!"); <<#DCFCE7>>
+        stop
+    endif
+endif
+
+@enduml
