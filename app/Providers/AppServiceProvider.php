@@ -22,5 +22,10 @@ class AppServiceProvider extends ServiceProvider
     {
         // Strict Architectural Rule 2: Prevent N+1 queries during development
         Model::preventLazyLoading(! app()->isProduction());
+
+        // Ensure all generated asset and route URLs use HTTPS in production or behind reverse proxies
+        if (str_starts_with(config('app.url'), 'https://') || app()->isProduction() || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')) {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
     }
 }

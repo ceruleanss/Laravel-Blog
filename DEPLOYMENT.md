@@ -114,7 +114,7 @@ nano .env
 
 Make sure the following variables are configured:
 ```ini
-APP_NAME="DevSphere Blog"
+APP_NAME="Laravel Blog"
 APP_ENV=production
 APP_DEBUG=false
 APP_URL=http://your-server-ip-or-domain.com
@@ -279,7 +279,7 @@ nano .env
 ```
 Ensure your `.env` contains:
 ```ini
-APP_NAME="DevSphere Blog"
+APP_NAME="Laravel Blog"
 APP_ENV=production
 APP_KEY=base64:your_generated_32_byte_key
 APP_DEBUG=false

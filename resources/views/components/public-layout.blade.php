@@ -6,6 +6,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 
     <title>{{ $title ? $title . ' — ' . config('app.name', 'Blog System') : config('app.name', 'Blog System') }}</title>
 
@@ -38,7 +39,7 @@
                             B
                         </span>
                         <span class="font-extrabold text-xl tracking-tight bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 dark:from-white dark:via-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
-                            DevSphere
+                            Laravel Blog
                         </span>
                     </a>
                     <p class="mt-4 text-sm text-gray-500 dark:text-gray-400 max-w-sm leading-relaxed">
@@ -100,7 +101,7 @@
             </div>
 
             <div class="mt-8 pt-8 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                <p>&copy; {{ date('Y') }} DevSphere. Designed with Laravel Blade Components & Alpine.js.</p>
+                <p>&copy; {{ date('Y') }} Laravel Blog. Designed with Laravel Blade Components & Alpine.js.</p>
                 <div class="flex items-center gap-4 mt-4 sm:mt-0">
                     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-medium">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>

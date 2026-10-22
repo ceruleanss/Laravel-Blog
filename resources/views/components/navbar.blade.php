@@ -9,7 +9,7 @@
                     </div>
                     <div class="flex flex-col">
                         <span class="font-extrabold text-xl tracking-tight bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 dark:from-white dark:via-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
-                            DevSphere
+                            Laravel Blog
                         </span>
                         <span class="text-[10px] tracking-widest uppercase font-semibold text-indigo-600 dark:text-indigo-400 -mt-1">
                             Insights &amp; Ideas

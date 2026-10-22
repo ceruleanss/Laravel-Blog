@@ -10,7 +10,7 @@
                             B
                         </span>
                         <span class="font-extrabold text-lg text-gray-900 dark:text-white">
-                            DevSphere
+                            Laravel Blog
                         </span>
                     </a>
                 </div>

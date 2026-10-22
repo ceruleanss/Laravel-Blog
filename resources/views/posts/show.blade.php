@@ -110,7 +110,7 @@
                         @<span>{{ $post->author->username }}</span>
                     </p>
                     <p class="mt-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                        Contributing author on DevSphere, sharing deep-dives on full-stack architecture, clean code standards, and developer productivity.
+                        Contributing author on Laravel Blog, sharing deep-dives on full-stack architecture, clean code standards, and developer productivity.
                     </p>
                     <div class="mt-4">
                         <a href="{{ route('posts.index', ['author' => $post->author->username]) }}"
